@@ -1,0 +1,10 @@
+*.pyc
+__pycache__
+*.c
+*.so
+docs/_build
+dist
+build
+chainscan.egg-info/
+_bak/
+_data/
