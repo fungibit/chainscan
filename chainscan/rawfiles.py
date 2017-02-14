@@ -22,45 +22,73 @@ class RawFilesIterator:
     
     This iterator generates filesystem paths to the files.
     
-    :note: This iterator is resumable.
+    :note: This iterator is resumable and refreshable.
     """
 
     DEFAULT_DATA_DIR = '~/bitcoin/blocks/'
     RAW_FILES_GLOB_PATTERN = 'blk*.dat'
 
-    def __init__(self, data_dir = None, raw_files_glob_pattern = None, show_progressbar = False):
+    def __init__(self, data_dir = None, raw_files_glob_pattern = None, refresh = True, show_progressbar = False):
         if data_dir is None:
             data_dir = self.DEFAULT_DATA_DIR
         self.data_dir = data_dir
         if raw_files_glob_pattern is None:
             raw_files_glob_pattern = self.RAW_FILES_GLOB_PATTERN
         self.raw_files_glob_pattern = raw_files_glob_pattern
-        
-        # state
+        self.refresh = refresh
+        self.show_progressbar = show_progressbar
+
+        self._prev_file = None
+        self._init()
+
+    def _init(self):
+
+        # files and state
         self._files = self._find_files()
         self._iter = iter(self._files)
 
-        if show_progressbar:
+        # progress bar
+        if self.show_progressbar and self._files:
             self.progressbar = _make_progressbar(self._files)
             self.progressbar_ctx = self.progressbar.__enter__()
             self._iter = self.progressbar
         else:
             self.progressbar = None
             self.progressbar_ctx = None
-
+    
     def _find_files(self):
         glob_pattern = os.path.expanduser(os.path.join(self.data_dir, self.RAW_FILES_GLOB_PATTERN))
-        return sorted(glob.glob(glob_pattern))
+        files = sorted(glob.glob(glob_pattern))
+        if self._prev_file is not None:
+            # only files not already used
+            files = [ f for f in files if f > self._prev_file ]
+            if files:
+                logger.debug('found %d new raw files' % len(files))
+        return files
+
+    def _raw_next(self):
+        self._prev_file = next(self._iter)
+        return self._prev_file
 
     def __next__(self):
-        # TBD: at the end, check to see if new files appeared?
         try:
-            return next(self._iter)
+            return self._raw_next()
         except StopIteration:
+            # done iterating over self._files.
+
             if self.progressbar_ctx is not None:
                 self.progressbar_ctx.__exit__(None, None, None)
+            
+            # refresh: check if new files appeared since we started
+            if self.refresh:
+                self._init()
+                if self._files:
+                    return self._raw_next()
+            
             raise
+        
         except:
+            # some other error occurred
             if self.progressbar_ctx is not None:
                 self.progressbar_ctx.__exit__(*sys.exc_info())
             raise
@@ -74,7 +102,7 @@ class RawDataIterator:
 
     Element type is an object with attributes blob (of type `bytes`) and filename.
     
-    :note: This iterator is resumable.
+    :note: This iterator is resumable and refreshable.
     """
     
     def __init__(self, raw_files_iter = None, use_mmap = True, **kwargs):
@@ -89,8 +117,10 @@ class RawDataIterator:
         self.use_mmap = use_mmap
 
     def __next__(self):
-        # TBD: at the end, check to see if new files appeared?
         raw_file = next(self.raw_files_iter)
+        return self.get_data(raw_file)
+
+    def get_data(self, raw_file):
         blob = self._get_blob(raw_file)
         return Bunch(
             blob = blob,
@@ -119,22 +149,11 @@ class RawDataIterator:
     def __iter__(self):
         return self
 
+    @property
+    def refresh(self):
+        return self.raw_files_iter.refresh
+
 ################################################################################
-
-class FilePos:
-    """
-    A position within a file.
-    """
-    
-    def __init__(self, filename, offset):
-        self.filename = filename
-        self.offset = offset
-        
-    def __repr__(self):
-        return '%s(%r, %s)' % (type(self).__name__, self.filename, self.offset)
-
-    def __str__(self):
-        return '%r, offset %s' % (self.filename, self.offset)
 
 def _make_progressbar(iterable, **kwargs):
     return click.progressbar(iterable, show_percent = True, show_eta = True, width = 0, **kwargs)

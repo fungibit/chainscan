@@ -32,17 +32,19 @@ Install using *pip*::
 
 For an easy start, see the `examples <examples.html>`_.
 
-
-Development Status
+Features
 ================================
 
-ChainScan is at an early stage of its development, yet the current release can already be
-useful to many.
+Some of the notable features supported:
 
-The next releases may not be backward compatible.
-
-Bug reports, suggestions and contributions are appreciated.
-
+- Iterate over blocks in the longest chain
+- Iterate over all blocks from all forks (in topological order)
+- "Tracked spending": For each tx input, resolve the tx output spent by it
+- Resumability: All iterators are resumable. You can pickle them, and later reload them,
+  picking up from where you left off.
+- Tailability: You can keep waiting for the next blocks to arrive. The iterator will
+  return the next blocks/txs as they arrive (think `tail -f`, or MongoDB's tailable cursor)
+- A `BlockChain` data structure, supporting block lookup by hash or height
 
 
 Design and Goals
@@ -64,18 +66,6 @@ looping, the other library with what you want to do `foreach block` or `foreach 
 (See `the examples <examples.html#along-with-other-bitcoin-libraries>`_.)
 
 
-Features
-================================
-
-Some of the notable features supported:
-
-- Iterate over blocks in the longest chain
-- Iterate over all blocks from all forks (in topological order)
-- "Tracked spending": For each tx input, resolve the tx output spent by it
-- Resumability: All iterators are resumable. You can pickle them, and later reload them,
-  picking up from where you left off.
-- A `BlockChain` data structure, supporting block lookup by hash or height
-
 Speed
 ================================
 
@@ -93,6 +83,17 @@ That said, efforts have been made for making this library as fast as possible, w
 its `design principles <#design-and-goals>`_.
 Some parts of the implementation are using Cython.
 Many more speed improvements are coming soon.
+
+
+Development Status
+================================
+
+ChainScan is at an early stage of its development, yet the current release can already be
+useful to many.
+
+The next releases may not be backward compatible.
+
+Bug reports, suggestions and contributions are appreciated.
 
 
 

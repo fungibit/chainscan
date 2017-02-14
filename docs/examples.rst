@@ -36,6 +36,43 @@ Ouput::
 Iterating over Blocks
 ================================
 
+`tail -f blocks`
+--------------------------------
+
+Iterate over all blocks, and in the end keep waiting for new ones, printing them as they arrive::
+
+    from chainscan import iter_blocks
+    from chainscan.utils import tailable
+    from datetime import datetime
+    for block in tailable(iter_blocks()):
+        print(datetime.now(), block.height, block.block_hash_hex)
+
+
+Biggest block timestamp "discrepancy"
+-------------------------------------------
+
+Block timestamps are approximate and not necessarily in order, but what is the
+biggest "discrepancy" observed?
+
+::
+
+    from chainscan import iter_blocks
+    from datetime import timedelta
+    max_ts_block = next(iter_blocks())
+    max_diff_block, max_diff = None, timedelta(seconds = 0)
+    for block in iter_blocks():
+        diff = max_ts_block.timestamp - block.timestamp
+        if diff > max_diff:
+            max_diff_block, max_diff = block, diff
+        if block.timestamp > max_ts_block.timestamp:
+            max_ts_block = block
+    print('block #%s was allegedly mined %s BEFORE a previous block' % (max_diff_block.height, max_diff))
+
+Output::
+
+    block #156114 was allegedly mined 1:58:45 BEFORE a previous block
+
+
 Count empty blocks per day
 -------------------------------
 

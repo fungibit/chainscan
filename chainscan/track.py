@@ -57,7 +57,7 @@ class TrackedSpendingTxIterator(TxIterator):
     :note: to track, requires maintaining a very big data structure of unspent tx outputs, thus
         this iterator can consume a lot of RAM (>6GB).
     
-    :note: This iterator is resumable.
+    :note: This iterator is resumable and refreshable.
     """
     
     def __init__(self, tracker = None, utxoset = None, *args, **kwargs):

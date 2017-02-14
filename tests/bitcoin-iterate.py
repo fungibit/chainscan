@@ -76,8 +76,9 @@ From the original documentation (with minor changes):
 import datetime
 from argparse import ArgumentParser
 
-from chainscan.scan import LongestChainBlockIterator, BlockFilter
+from chainscan import iter_blocks, BlockFilter
 from chainscan.track import TxSpendingTracker
+from chainscan.utils import tailable
 from chainscan.misc import bytes2uint32, hash_hex_to_bytes, s2f
 from chainscan.defs import OP_RETURN
 
@@ -221,12 +222,12 @@ def main():
     all_formats = [ blk_format, tx_format, input_format, output_format ]
     
     any_not_none = lambda fmts: any(fmt is not None for fmt in fmts)
-    iter_blocks = any_not_none([ blk_format, tx_format, input_format, output_format ])
-    iter_txs = any_not_none([ tx_format, input_format, output_format ])
-    iter_inputs = any_not_none([ input_format, ])
-    iter_outputs = any_not_none([ output_format, ])
+    should_iter_blocks = any_not_none([ blk_format, tx_format, input_format, output_format ])
+    should_iter_txs = any_not_none([ tx_format, input_format, output_format ])
+    should_iter_inputs = any_not_none([ input_format, ])
+    should_iter_outputs = any_not_none([ output_format, ])
     
-    if not iter_blocks:
+    if not should_iter_blocks:
         return
         
     track_spending = any(
@@ -240,22 +241,26 @@ def main():
     else:
         track = lambda txs: txs  # noop
     
-    for block in LongestChainBlockIterator(block_filter = block_filter):
+    block_iter = iter_blocks(block_filter = block_filter)
+    if options.tailable:
+        block_iter = tailable(block_iter)
+    
+    for block in block_iter:
         
         if blk_format is not None:
             print(format_line(blk_format, block, None, None, None, None, None, None))
         
-        txs = block.txs if iter_txs else []
+        txs = block.txs if should_iter_txs else []
         for tx_idx, tx in enumerate(track(txs)):
             
             if tx_format is not None:
                 print(format_line(tx_format, block, tx, tx_idx, None, None, None, None))
                 
-            if iter_inputs:
+            if should_iter_inputs:
                 for input_idx, input in enumerate(tx.inputs):
                     print(format_line(input_format, block, tx, tx_idx, input, input_idx, None, None))
 
-            if iter_outputs:
+            if should_iter_outputs:
                 for output_idx, output in enumerate(tx.outputs):
                     print(format_line(output_format, block, tx, tx_idx, None, None, output, output_idx))
 
@@ -265,18 +270,24 @@ def main():
 def getopt():
     parser = ArgumentParser()
     
+    # formats
     parser.add_argument('--block',  help = 'Format to print for each block')
     parser.add_argument('--tx', '--transaction', help = 'Format to print for each transaction')
     parser.add_argument('--input', help = 'Format to print for each transaction input')
     parser.add_argument('--output', help = 'Format to print for each transaction output')
     #parser.add_argument('--utxo', help = 'Format to print for each UTXO')  # not supported by us
     
+    # start / stop filters
     parser.add_argument('--start-block-height', type = int)
     parser.add_argument('--stop-block-height', type = int)
     parser.add_argument('--start-block-time', type = parse_time)
     parser.add_argument('--stop-block-time', type = parse_time)
     parser.add_argument('--start-block-hash', type = hash_hex_to_bytes)
     parser.add_argument('--stop-block-hash', type = hash_hex_to_bytes)
+    
+    # other
+    parser.add_argument('--tailable', '-f', '--follow', action = 'store_true',
+                        help = 'wait for more data, process it as it arrives')
     
     return parser.parse_args()
 

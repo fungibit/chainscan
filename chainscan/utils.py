@@ -2,6 +2,9 @@
 Miscellaneous convenience functions for iterating over blocks, txs, etc.
 """
 
+import time
+import threading
+
 from .scan import LongestChainBlockIterator, TxIterator
 from .track import TrackedSpendingTxIterator
 from .blockchain import BlockChainIterator
@@ -88,6 +91,54 @@ def iter_txs(
         block_iter = block_iter,
     )
     return tx_iter_cls(**tx_kwargs)
+    
+
+################################################################################
+# itertools
+
+class tailable:
+    """
+    An iterator-wrapper which keeps waiting for new data from the underlying
+    iterator.
+    
+    The underlying iterator needs to be "refreshable", i.e. calls to next()
+    can keep returning more data as it arrives, even after raising
+    StopIteration on past calls to next().
+    
+    :note: This iterator is resumable if the underlying is resumable.
+    """
+    
+    def __init__(self, iterator, timeout = None, polling_interval = 5):
+        self.iter = iterator
+        if timeout is None:
+            timeout = float('Inf')
+        self.timeout = timeout
+        self.polling_interval = polling_interval
+        self._stop_event = threading.Event()
+        
+    def __next__(self):
+        start_time = time.time()
+        while not self._stop_event.is_set():
+            try:
+                return next(self.iter)
+            except StopIteration:
+                # no more available data. check timeout, then sleep+retry
+                elapsed_time = time.time() - start_time
+                remaining_time = self.timeout - elapsed_time
+                if remaining_time <= 0:
+                    # timed out, waited long enough
+                    break
+                self._stop_event.wait(timeout = min(self.polling_interval, remaining_time))
+        raise StopIteration
+    
+    def __iter__(self):
+        return self
+    
+    def stop(self):
+        """
+        Signal the iterator to stop waiting for more data
+        """
+        self._stop_event.set()
     
 
 ################################################################################

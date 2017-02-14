@@ -6,8 +6,8 @@ the blockchain.
 from sortedcontainers import SortedList
 
 from .defs import GENESIS_PREV_BLOCK_HASH, HEIGHT_SAFETY_MARGIN
-from .misc import hash_hex_to_bytes, Bunch
-from .rawfiles import RawDataIterator, FilePos
+from .misc import hash_hex_to_bytes, FilePos, Bunch
+from .rawfiles import RawDataIterator
 from .entities import Block, StoredBlock
 
 from .loggers import logger
@@ -143,7 +143,7 @@ class RawFileBlockIterator:
     
     :note: Height is set to -1 for all blocks.
 
-    :note: This iterator is resumable.
+    :note: This iterator is resumable and refreshable.
     """
 
     Block = Block
@@ -164,19 +164,27 @@ class RawFileBlockIterator:
         self._cur_filename = None
 
     def __next__(self):
-        # TBD: at the end, check to see if new files appeared, or new blocks in last file?
         
         if self._cur_offset >= len(self._cur_blob):
-            # read next blob. we're done with the previous one
+            # we're done with this blob. read the next one. 
             #if self._cur_blob is not None:
             #    assert self._cur_offset == len(self._cur_blob), (self._cur_offset, len(self._cur_blob))
-            self._read_next_blob()
+            self._read_next_blob()  # raises StopIteration if no more files
     
         block_offset = self._cur_offset
         block = self.Block.from_blob(self._cur_blob[block_offset : ])
         if block is None:
             # past last block (in the last blk.dat file)
-            raise StopIteration
+            
+            # refresh: check if new data was added to this blob since we read it
+            if self.refresh:
+                self._reread_blob()
+                block = self.Block.from_blob(self._cur_blob[block_offset : ])
+            
+            if block is None:
+                # no new data, even after refreshing
+                raise StopIteration
+            
         self._cur_offset += 8 + block.rawsize
         return StoredBlock(
             block = block,
@@ -184,14 +192,23 @@ class RawFileBlockIterator:
         )
 
     def _read_next_blob(self):
-        raw = next(self.raw_data_iter)
-        self._cur_blob = raw.blob
-        self._cur_filename = raw.filename
+        data = next(self.raw_data_iter)  # raises StopIteration if no more files
+        self._cur_blob = data.blob
+        self._cur_filename = data.filename
         self._cur_offset = 0
+
+    def _reread_blob(self):
+        if self._cur_filename is not None:
+            # note: not updating self._cur_filename and self._cur_offset, because
+            # we need to keep reading from the same offset in the same file.
+            self._cur_blob = self.raw_data_iter.get_data(self._cur_filename).blob
 
     def __iter__(self):
         return self
-    
+
+    @property
+    def refresh(self):
+        return self.raw_data_iter.refresh
 
 class TopologicalBlockIterator:
     """
@@ -204,7 +221,7 @@ class TopologicalBlockIterator:
 
     Element type is `Block`.
 
-    :note: This iterator is resumable.
+    :note: This iterator is resumable and refreshable.
     """
 
     def __init__(self, rawfile_block_iter = None, **kwargs):
@@ -282,7 +299,7 @@ class LongestChainBlockIterator:
 
     Element type is `Block`.
     
-    :note: This iterator is resumable.
+    :note: This iterator is resumable and refreshable.
     """
 
     # TBD: an option to generate_unsafe_tail
@@ -471,7 +488,7 @@ class TxIterator:
             
     Element type is `Tx` (or `TxInBlock`, if `include_block_context=True`.
     
-    :note: This iterator is resumable.
+    :note: This iterator is resumable and refreshable.
     """
     
     def __init__(self, include_block_context = False, include_tx_blob = False, block_iter = None, **kwargs):
