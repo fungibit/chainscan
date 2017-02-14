@@ -32,6 +32,9 @@ OP_HASH160       = 0xA9
 # Other
 #===================================================================================================================
 
+DEFAULT_DATA_DIR = '~/.bitcoin/blocks/'  # TBD support other platforms
+RAW_FILES_GLOB_PATTERN = 'blk*.dat'
+
 SATOSHIS_IN_ONE = 10**8
 
 HEIGHT_SAFETY_MARGIN = 6

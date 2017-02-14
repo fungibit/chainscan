@@ -9,6 +9,7 @@ import click
 #import mmap
 import numpy as np
 
+from .defs import DEFAULT_DATA_DIR, RAW_FILES_GLOB_PATTERN
 from .misc import Bunch
 
 from .loggers import get_logger
@@ -25,8 +26,9 @@ class RawFilesIterator:
     :note: This iterator is resumable and refreshable.
     """
 
-    DEFAULT_DATA_DIR = '~/bitcoin/blocks/'
-    RAW_FILES_GLOB_PATTERN = 'blk*.dat'
+    DEFAULT_DATA_DIR = DEFAULT_DATA_DIR
+    RAW_FILES_GLOB_PATTERN = RAW_FILES_GLOB_PATTERN
+    
 
     def __init__(self, data_dir = None, raw_files_glob_pattern = None, refresh = True, show_progressbar = False):
         if data_dir is None:
