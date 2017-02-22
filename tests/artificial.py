@@ -5,8 +5,10 @@ which includes forks. Used for testing.
 
 import datetime
 
+from chainscan.block import deserialize_block
+
 from chainscan.defs import MAGIC
-from chainscan.entities import Block
+MAGIC = MAGIC.to_bytes(4, 'little')
 
 FORKED_NONCE = 0xffffffff
 
@@ -37,7 +39,7 @@ def make_block(height, prev_block_hash, nonce = None):
     
     size = len(blob)
     blob = MAGIC + to_bytes(size, 4) + blob
-    return Block(memoryview(blob), height)
+    return deserialize_block(bytearray(blob), height)
 
 def gen_blocks(next_height, prev_block_hash, num_blocks, **kwargs):
     blocks = []
@@ -92,6 +94,8 @@ def gen_artificial_block_rawdata_with_forks(num_blocks = 200):
     # return a single blob
     blob = bytes()
     for block in blocks:
+        blob += MAGIC
+        blob += len(block.blob).to_bytes(4, 'little')
         blob += block.blob
     return blob
    

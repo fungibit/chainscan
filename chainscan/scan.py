@@ -3,14 +3,16 @@ The basic iterator-classes for iterating over the blocks and transactions of
 the blockchain.
 """
 
+from collections import deque
 from sortedcontainers import SortedList
 
 from .defs import GENESIS_PREV_BLOCK_HASH, HEIGHT_SAFETY_MARGIN
 from .misc import hash_hex_to_bytes, FilePos, Bunch
 from .rawfiles import RawDataIterator
-from .entities import Block, StoredBlock
+from .block import StoredBlock, deserialize_block
 
 from .loggers import logger
+
 
 ################################################################################
 # filtering
@@ -146,9 +148,6 @@ class RawFileBlockIterator:
     :note: This iterator is resumable and refreshable.
     """
 
-    Block = Block
-    
-    
     def __init__(self, raw_data_iter = None, **kwargs):
         """
         :param raw_data_iter: a RawDataIterator
@@ -172,14 +171,14 @@ class RawFileBlockIterator:
             self._read_next_blob()  # raises StopIteration if no more files
     
         block_offset = self._cur_offset
-        block = self.Block.from_blob(self._cur_blob[block_offset : ])
+        block = deserialize_block(self._cur_blob[block_offset : ], -1)
         if block is None:
             # past last block (in the last blk.dat file)
             
             # refresh: check if new data was added to this blob since we read it
             if self.refresh:
                 self._reread_blob()
-                block = self.Block.from_blob(self._cur_blob[block_offset : ])
+                block = deserialize_block(self._cur_blob[block_offset : ], -1)
             
             if block is None:
                 # no new data, even after refreshing
@@ -192,7 +191,7 @@ class RawFileBlockIterator:
         )
 
     def _read_next_blob(self):
-        data = next(self.raw_data_iter)  # raises StopIteration if no more files
+        data = self.raw_data_iter.__next__()  # raises StopIteration if no more files . # easier to profile with x.__next__() instead of next(x)...
         self._cur_blob = data.blob
         self._cur_filename = data.filename
         self._cur_offset = 0
@@ -234,50 +233,53 @@ class TopologicalBlockIterator:
         self.rawfile_block_iter = rawfile_block_iter
 
         # state
-        self._height_by_hash = { GENESIS_PREV_BLOCK_HASH: -1 } # genesis is 0, so its prev is -1
-        self._pending_blocks = []
-
+        self._height_by_hash = { GENESIS_PREV_BLOCK_HASH: -1 }  # genesis is 0, so its prev is -1
+        self._orphans = {}  # block_hash -> a list of orphan blocks waiting for it to appear
+        self._ready_blocks = deque()  # blocks which can be released on next call to __next__()
 
     def __next__(self):
-        while True:
-            block = self._get_next_block_to_release()
-            if block is not None:
-                return block
-            # no next block in pending blocks. need to read more data
+        # read more data if necessary
+        while not self._ready_blocks:
             self._read_another_block()
+        # release a block
+        return self._get_next_block_to_release()
+
+    def _read_another_block(self):
+        # note: block.height is not set by RawFileBlockIterator
+        block = self.rawfile_block_iter.__next__().block  # easier to profile with x.__next__() instead of next(x)...
+        #logger.debug('prev-block-reference: %s -> %s', block.block_hash_hex, block.prev_block_hash_hex) # commented out because hex() takes time...
+        # handle new block either as "ready" or "orphan":
+        height_by_hash = self._height_by_hash
+        prev_block_hash = block.prev_block_hash
+        prev_height = height_by_hash.get(prev_block_hash)
+        if prev_height is None:
+            # prev not found. orphan.
+            self._orphans.setdefault(prev_block_hash, []).append(block)
+            return False
+        else:
+            # prev found. block is "ready".
+            self._disorphanate_block(block, prev_height + 1)
+            return True
 
     def _get_next_block_to_release(self):
-        # note: this function linearily searches pending_blocks, which is sort of inefficient.
-        # we could use a dict from (missing-block-hash to a list of pending blocks waiting for it),
-        # and then run BFS on that when a new missing block is found.
-        # in theory that would have been much faster asymptomatically.
-        # however, since pending_blocks should always be small, the complication just isn't
-        # worth it.
+        # release a block from _ready_blocks, and disorphanate its children
+        block = self._ready_blocks.popleft()
+        self._disorphanate_children_of(block)
+        return block
         
-        # but it probably isn't run a BFS
-        height_by_hash = self._height_by_hash
-        pending_blocks = self._pending_blocks
-        for idx, block in enumerate(pending_blocks):
-            prev_block_hash = block.prev_block_hash
-            prev_height = height_by_hash.get(prev_block_hash)
-            if prev_height is None:
-                # prev not found. remains pending.
-                continue
-            # prev found. block can now be used
-            # height is known now. set it on the block
-            height = prev_height + 1
-            block.height = height
-            height_by_hash[block.block_hash] = height
-            del pending_blocks[idx]
-            return block
-        return None
-        
-    def _read_another_block(self):
-        # note: cur_block.height is not set by RawFileBlockIterator
-        cur_block = next(self.rawfile_block_iter).block
-        #logger.debug('prev-block-reference: %s -> %s', cur_block.block_hash_hex, cur_block.prev_block_hash_hex) # commented out because hex() takes time...
-        self._pending_blocks.append(cur_block)
-        
+    def _disorphanate_children_of(self, block):
+        children = self._orphans.pop(block.block_hash, ())
+        child_height = block.height + 1
+        for child_block in children:
+            self._disorphanate_block(child_block, child_height)
+            
+    def _disorphanate_block(self, child_block, height):
+        # block's height is known now. set it:
+        child_block.height = height
+        self._height_by_hash[child_block.block_hash] = height
+        # no longer orphan. it is ready for releasing:
+        self._ready_blocks.append(child_block)  # appendright
+
     def __iter__(self):
         return self
 
@@ -431,7 +433,7 @@ class LongestChainBlockIterator:
         leaf_heights = self._leaf_heights
         
         # fetch another block
-        block = next(self.block_iter)
+        block = self.block_iter.__next__()  # easier to profile with x.__next__() instead of next(x)...
         block_height = block.height
         block_hash = block.block_hash
         prev_block_hash = block.prev_block_hash
@@ -509,7 +511,7 @@ class TxIterator:
         while True:
             try:
                 # return the next tx in this block:
-                tx = next(self._block_txs)
+                tx = self._block_txs.__next__()  # easier to profile with x.__next__() instead of next(x)...
                 return tx
             except StopIteration:
                 # done with this block
@@ -518,7 +520,7 @@ class TxIterator:
             self._block_txs = self._get_iter_of_next_block()
 
     def _get_iter_of_next_block(self):
-        txs = next(self.block_iter).txs
+        txs = self.block_iter.__next__().txs  # easier to profile with x.__next__() instead of next(x)...
         if self.include_block_context:
             return txs.iter_txs_in_block(include_tx_blob = self.include_tx_blob)
         else:

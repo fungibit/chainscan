@@ -114,6 +114,24 @@ Ouput::
     ...
 
 
+Total number of coins
+-------------------------------
+
+The total number of minted coins is the sum of values of all coinbase txs.
+
+::
+
+    from chainscan import iter_blocks
+    total_btc = 0
+    for block in iter_blocks(show_progressbar = True):
+        coinbase_tx = next(iter(block.txs))  # the first tx is coinbase
+        total_btc += coinbase_tx.get_total_output_value()
+    print('Total %d satoshis (up to block height %d)' % (total_btc, block.height))
+
+Output::
+
+    Total 1620649064333173 satoshis (up to block height 451361)
+
 Iterating over Transactions
 ================================
 
@@ -254,9 +272,15 @@ Output::
 Tracking Tx Spending
 ================================
 
+Note that with tracked-spending enabled, a UTXO set data structure is maintained in memory.
+This will use up at least 3GB of RAM (as of Jan 2017).
+
 
 Txs with highest fees ever
 ------------------------------
+
+In order to calculate tx fee, we need to find spent-output for each input.
+This is done by "tracked spending".
 
 ::
 
@@ -294,6 +318,38 @@ Output::
     ed4c7cbde21b2a0abfbf86b3c330b8990d7b64cf8ca8a2351864178b8af25df6 42.94967296
     371fdf9eddba61b624e63f67c072a49d3e52f7ca835668f9bcce2b11610b5357 42.94967296
 
+Tx fee inclusion-threshold per block
+----------------------------------------------
+
+Since we iterate "foreach block, foreach tx", and not simply "foreach tx", we need to maintain the
+spending-tracker ourselves.  That is simple to do:
+we create a `TxSpendingTracker`, and iterate over `track(block.txs)` instead of `block.txs`.
+
+::
+
+    from chainscan import iter_blocks
+    from chainscan.track import TxSpendingTracker
+    data = []
+    track = TxSpendingTracker()
+    for block in iter_blocks():
+        s_per_byte_arr = [ tx.get_fee_paid() / tx.rawsize for tx in track(block.txs)
+                           if not tx.is_coinbase ]
+        if not s_per_byte_arr:  # empty block
+            s_per_byte_arr = [0]
+        data.append(min(s_per_byte_arr))
+    
+    import numpy as np
+    from matplotlib import pyplot
+    start_height = 200000
+    pyplot.plot(np.arange(len(data))[start_height:], data[start_height:])
+    pyplot.xlabel('Block Height')
+    pyplot.ylabel('Min Block Fee (Satoshi per byte)')
+    pyplot.title('Fee Threshold Per Block')
+    pyplot.savefig('block_fee_threshold.png')
+
+.. image:: block_fee_threshold.png
+   :height: 320
+
 
 All txs which spend txs in the same block (2)
 ----------------------------------------------
@@ -305,8 +361,8 @@ doing the same thing without tracked-spending.
 
 This example is slower, uses more memory, but is simpler to code.
 
-
-*(Not supported yet -- need to include tx's block-context when tracking spending.)*
+::
+    *(Not supported yet -- need to include tx's block-context when tracking spending.)*
 
 
 The BlockChain Data Structure

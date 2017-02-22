@@ -3,7 +3,7 @@ Tools for scanning while tracking refs from inputs to the outputs they spend.
 """
 
 from .scan import TxIterator
-from .cyt import UtxoSet
+from ._track_c import UtxoSet
 
 
 ################################################################################
@@ -18,7 +18,7 @@ class TxSpendingTracker:
     
         track = TxSpendingTracker()
         for block in iter_blocks():
-            for tx in track(block.iter_txs()):
+            for tx in track(block.txs):
                 for txinput in txinput:
                     print(txinput.spent_output)
             if len(track.utxoset) > N:
@@ -91,7 +91,7 @@ def _track_tx_spending(tx, utxoset):
     for txin in tx.inputs:
         if txin.is_coinbase:
             continue
-        spent_output = utxoset.spend(txin.spent_txid, txin.spent_output_idx)
+        spent_output = utxoset.spend(txin._spent_txid, txin.spent_output_idx)
         #assert spent_output is not None, (tx, txin)
         txin.spent_output = spent_output
     # add outputs of new tx to utxoset

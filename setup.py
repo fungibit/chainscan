@@ -2,17 +2,39 @@
 from os import path
 from glob import glob
 from codecs import open
-import numpy
 from setuptools import setup, Extension, find_packages
+from Cython.Build import cythonize
+import numpy
 
-try:
-    from Cython.Build import cythonize
-except ImportError:
-    USE_CYTHON = False
-else:
-    USE_CYTHON = True
+################################################################################
 
+EXTENSION_KWARGS = dict(
+    include_dirs = [ numpy.get_include(), '.' ],
+    libraries = [ 'crypto' ],
+)
+
+CYTHONIZE_KWARGS = dict(
+    #annotate = True,
+)
+
+# The directory containing this file (setup.py):
 here = path.abspath(path.dirname(__file__))
+
+################################################################################
+# cython stuff
+
+pyx_files = [ path.basename(f) for f in glob(path.join(here, 'chainscan', '*.pyx')) ]
+extensions = [
+    Extension(
+        'chainscan.%s' % pyx_file.split('.')[0],
+        [ path.join('chainscan', pyx_file) ],
+        **EXTENSION_KWARGS
+    )
+    for pyx_file in pyx_files
+]
+extensions = cythonize(extensions, **CYTHONIZE_KWARGS)
+
+################################################################################
 
 # Read version info from version.py
 version_vars = {}
@@ -24,23 +46,9 @@ version_string = version_vars['__version_string__']
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-# cython stuff
-pyx_files = glob(path.join(here, 'chainscan', '*.pyx'))
-USE_CYTHON = USE_CYTHON and len(pyx_files) > 0
-ext = '.pyx' if USE_CYTHON else '.c'
-extensions = [
-    Extension(
-        'chainscan.cyt',
-        [ path.join('chainscan', 'cyt' + ext) ],
-        include_dirs = [ numpy.get_include(), '.' ],
-        extra_compile_args = ['-O3'],
-        #extra_link_args = ['-g'],
-    )
-]
-if USE_CYTHON:
-    extensions = cythonize(extensions)
-
+################################################################################
 # setup
+
 setup(
     name='chainscan',
     ext_modules = extensions,
@@ -60,3 +68,4 @@ setup(
 
 )
 
+################################################################################

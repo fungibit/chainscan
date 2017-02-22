@@ -1,0 +1,100 @@
+
+====================================================
+==== TBD chainscan
+====================================================
+
+TODAY
+    go over TBDs
+    cleanups and commit
+example: verify merkle root
+track block context + example
+track scripts + example
+pre-deserializing all block-txs: profile bin/tx.py with cythonized _block.py (with experimental code), compare to original
+open an issue re prefetching and pre-parsing next block (thanks to nogil)
+packaging
+    pip / pypi
+    readthedocs
+    notify:
+        reddit
+        rusty russel (https://github.com/rustyrussell/bitcoin-iterate)
+tracking:
+    ISSUE#1 support DB-backed utxoset
+    ISSUE#3 should also (optionally) store output scripts
+    ISSUE#4 support storing extra data, e.g. timestamp for days-destroyed (with this, can support %iB)
+optimizations:
+    ISSUE#5 use python3.6 (should improve memory consumption, formated strings, asyncio?)
+    parse tx's async-ly? (while user is processing a tx, next txs of the block can be parsed). use nogil?
+        an example: write all txids to mongodb
+future versions
+    ISSUE#7 support yielding user-provided entity types (a different Tx, block, txoutput, etc.) (with a settings.py module?)
+    cli module, for specifying block filter options from cli
+    an option to yield unsafe tail in longest-chain iterator
+    inteligent parallelism -- while True: grab all next txs whose parents has already been processed, process them in parallel
+
+====================================================
+==== TBD Taint
+====================================================
+
+clustering
+    implement bitcluster
+    implement jonas nick's heuristics for clustering
+    implement jm_unmixer
+taint
+    learn about taint
+    can jm_unmixer be extended for taint?
+there is info in every tx, even if not in best chain (in a fork, in utxoset, in mempool). should include them?
+
+notify:
+    incze
+    reddit
+    researchers (jonas, bitcluster)
+
+
+====================================================
+====================================================
+====================================================
+====================================================
+====================================================
+====================================================
+==== chainscan examples
+====================================================
+
+
+=== TBD
+
+txs:
+    hidden "strings" in tx scripts
+    track:
+        find all txs which spend txs in the same block [2] -- with tracking -- NOT SUPPORTED YET
+        day with most total bdd in 2016 -- NOT SUPPORTED YET
+collaboration with other tools:
+    block which beats the difficulty by the most
+    vitalik's Pybitcointools: verify each script -- not supported yet (tracking scripts) -- for tx in iter_txs(tx_kwargs=dict(include_tx_blob = True)): TBD
+    python-libbitcoin: find all txs involving address X (extract address from script)
+
+-----------------------------------------------------------------------------------------------------
+
+== INCOMPLETE!! vitalik's Pybitcointools: verify each script -- not supported yet (tracking scripts)
+from bitcoin.transaction import verify_tx_input
+for tx in iter_txs(tx_kwargs=dict(include_tx_blob = True)):
+    i = tx.inputs[0]
+    iscript = i.script
+    o = i.spent_output
+    oscript = o.script <-- to be supported
+    verify_tx_input(tx.blob, idx, script, sig, pub) <-- TBD not tested
+    
+
+
+====================================================
+====================================================
+====================================================
+====================================================
+====================================================
+
+TIMING with SSD (451300 blocks)
+    bitcoin-iterate
+        iter blocks: 1.8 minutes
+        iter txs:    9.3 minutes
+    
+        
+====================================================

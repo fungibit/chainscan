@@ -2,17 +2,19 @@
 Miscellaneous functions used throughout this package.
 """
 
-from hashlib import sha256
 from decimal import Decimal
 
 from .defs import SATOSHIS_IN_ONE
 
 # make these importable from here:
-from .cyt import bytes2uint32, bytes2uint64
+from ._common_c import doublehash, bytes2uint32, bytes2uint64, bytes_to_hash_hex, deserialize_varlen_integer
+# avoid pyflakes "imported but unused" warnings:
+doublehash, bytes2uint32, bytes2uint64, bytes_to_hash_hex, deserialize_varlen_integer
 
-#===================================================================================================================
+
+################################################################################
 # unit conversion
-#===================================================================================================================
+################################################################################
 
 def satoshi2float(x):
     return x / SATOSHIS_IN_ONE
@@ -24,22 +26,13 @@ def satoshi2decimal(x):
 s2f = satoshi2float
 s2d = satoshi2decimal
 
-#===================================================================================================================
-# hash related
-#===================================================================================================================
-
-def doublehash(x):
-    return sha256(sha256(x).digest()).digest()
-
-def bytes_to_hash_hex(b):
-    return b[::-1].hex()
+################################################################################
+# other
+################################################################################
 
 def hash_hex_to_bytes(hash_hex):
     return bytes.fromhex(hash_hex)[::-1]
 
-#===================================================================================================================
-# other
-#===================================================================================================================
 
 class FilePos:
     """
@@ -62,4 +55,4 @@ class Bunch:
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
 
-#===================================================================================================================
+################################################################################

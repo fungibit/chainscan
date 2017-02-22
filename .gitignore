@@ -1,6 +1,7 @@
 *.pyc
 __pycache__
 *.c
+*.cpp
 *.so
 docs/_build
 dist

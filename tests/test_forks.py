@@ -6,7 +6,6 @@ import unittest
 import numpy as np
 
 from chainscan.scan import LongestChainBlockIterator
-from chainscan.parse import bytes2uint32
 from chainscan.misc import Bunch
 from tests.test_blockiter import BlockIterTest, TOTAL_NUM_BLOCKS
 from tests.artificial import gen_artificial_block_rawdata_with_forks
@@ -38,7 +37,7 @@ class ForkTest(BlockIterTest):
     def test_longestchain2(self):
         # The artificial blocks which belong to longest chain are generated with nonce=height
         for blk in LongestChainBlockIterator(raw_data_iter = self._get_raw_data_iter()):
-            self.assertEqual(bytes2uint32(blk.nonce), blk.height)
+            self.assertEqual(blk.nonce, blk.height)
     
 ################################################################################
 
