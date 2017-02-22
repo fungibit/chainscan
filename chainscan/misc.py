@@ -50,9 +50,11 @@ class FilePos:
         return '%r, offset %s' % (self.filename, self.offset)
 
 
-# taken from here: https://code.activestate.com/recipes/52308-the-simple-but-handy-collector-of-a-bunch-of-named/
-class Bunch:
-    def __init__(self, **kwds):
-        self.__dict__.update(kwds)
+class Bunch(dict):
+    """ A dict which allows accessing its items using attribute-access. """
+    def __init__(self, *a, **kw):
+        self.__dict__ = self
+        super().__init__(*a, **kw)
+
 
 ################################################################################

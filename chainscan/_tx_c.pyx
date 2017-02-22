@@ -10,6 +10,8 @@ include "consts.pxi"
 from chainscan._common_c cimport uint32_t, uint64_t, bytesview, btc_value, varlenint_pair
 from chainscan._common_c cimport bytes2uint32, bytes2uint64, bytes_to_hash_hex, deserialize_varlen_integer, doublehash
 
+from chainscan.misc import Bunch
+
 
 ################################################################################
 # TX-RELATED EXTENSION CLASSES
@@ -45,13 +47,13 @@ cdef class TxInput:
             uint32_t spent_output_idx,
             bytesview script,
             uint32_t sequence,
-            TxOutput spent_output = None,
+            object spending_info = None,
             ):
         self._spent_txid = spent_txid
         self.spent_output_idx = spent_output_idx
         self.script = script
         self.sequence = sequence
-        self.spent_output = spent_output
+        self.spending_info = spending_info
 
     property is_coinbase:
         def __get__(self):
@@ -69,11 +71,15 @@ cdef class TxInput:
     def __repr__(self):
         return '<TxInput spending %s:%s>' % ( self.spent_txid_hex, self.spent_output_idx )
         
-    # The following are only usable if spent_output is set
+    # The following are only usable if spending_info is set
     
+    property spent_output:
+        def __get__(self):
+            return self.spending_info.spent_output
+        
     property value:
         def __get__(self):
-            return self.spent_output.value
+            return self.spending_info.spent_output.value
 
     # pickle support
     # Note we convert bytesview to bytearray, making copies. This means the restored objects
@@ -85,7 +91,7 @@ cdef class TxInput:
             self.spent_output_idx,
             bytearray(self.script),
             self.sequence,
-            self.spent_output,
+            self.spending_info,
         )
     
     def __setstate__(self, state):
@@ -94,7 +100,7 @@ cdef class TxInput:
             self.spent_output_idx,
             self.script,
             self.sequence,
-            self.spent_output,
+            self.spending_info,
         ) = state
 
 
@@ -102,6 +108,11 @@ cdef class CoinbaseTxInput:
     """
     A bitcoin coinbase-transaction input.
     """
+
+    SPENDING_INFO = Bunch(
+        spent_output = None,
+        block_height = -1,
+    )
 
     def __init__(self, bytesview script, uint32_t sequence):
         self.script = script
@@ -126,6 +137,10 @@ cdef class CoinbaseTxInput:
     property value:
         def __get__(self):
             return 0
+
+    property spending_info:
+        def __get__(self):
+            return self.SPENDING_INFO
 
     def __repr__(self):
         return '<TxInput {COINBASE}>'
@@ -190,7 +205,7 @@ cdef class Tx:
         cdef TxOutput o
         return sum( o.value for o in self.outputs )
 
-    # The following are only usable if spent_output is set on tx.inputs
+    # The following are only usable if spending_info is set on tx.inputs
 
     def get_total_input_value(self):
         return sum( i.value for i in self.inputs )

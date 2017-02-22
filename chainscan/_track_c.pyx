@@ -18,6 +18,8 @@ from chainscan._common_c cimport uint8_t, uint32_t, uint64_t, bytesview, btc_val
 from chainscan._common_c cimport bytes2uint64, bytes_to_hash_hex
 from chainscan._tx_c cimport TxOutput
 
+from chainscan.misc import Bunch
+
 
 ################################################################################
 
@@ -29,10 +31,9 @@ cdef:
 assert TXID_PREFIX_SIZE <= 8, TXID_PREFIX_SIZE
 ctypedef uint64_t txid_key_t
 
+
 ################################################################################
 # UTX ENTRY
-
-ctypedef pair[uint64_t, uint8_t] value_pair  # [value, is_last]
 
 cdef struct _UtxEntry:
     # An entry in the UtxoSet data structure.
@@ -40,6 +41,12 @@ cdef struct _UtxEntry:
     osize_t num_outputs
     osize_t num_unspent
     int block_height
+
+cdef struct _UtxoSpendingInfo:
+    # txoutput-level data included in a _UtxEntry
+    btc_value value
+    int block_height
+    uint8_t is_last
 
 
 @boundscheck(False)
@@ -75,12 +82,14 @@ cdef void _UtxEntry_dealloc(_UtxEntry &self) nogil:
 @boundscheck(False)
 @wraparound(False)
 @nonecheck(False)
-cdef btc_value _UtxEntry_spend(_UtxEntry &self, osize_t idx) nogil:
-    cdef btc_value o = self.output_value_arr[idx]
-    if o > 0:
+cdef void _UtxEntry_spend(_UtxEntry &self, _UtxoSpendingInfo &spending_info, osize_t idx) nogil:
+    spending_info.value = self.output_value_arr[idx]
+    spending_info.block_height = self.block_height
+    # remove this output from self:
+    if spending_info.value > 0:
         self.output_value_arr[idx] = 0
         self.num_unspent -= 1
-    return o
+    spending_info.is_last = (self.num_unspent == 0)
 
 cdef _UtxEntry_getstate(_UtxEntry &self):
     cdef osize_t i
@@ -146,10 +155,16 @@ cdef class UtxoSet:
         """
         cdef txid_key_t key
         cdef list outputs = tx.outputs
+        cdef int block_height
+        
+        # use block.height if tx includes block-context (i.e. tx is a TxInBlock).
+        # else, use block_height=-1
+        block = getattr(tx, 'block', None)
+        block_height = block.height if block is not None else -1
 
         # create a _UtxEntry to insert:
         cdef _UtxEntry txdata
-        _UtxEntry_init_from_output_list(txdata, outputs, -1)  # TBD: set block_height
+        _UtxEntry_init_from_output_list(txdata, outputs, block_height)
 
         # insert to the map:
         if txdata.num_unspent > 0:
@@ -162,30 +177,22 @@ cdef class UtxoSet:
     def spend(self, bytesview spent_txid, osize_t spent_output_idx):
         """
         Find and remove a specific UTXO.
-        :return: the newly-spent TxOutput
+        :return: a Bunch object representing spending_info
         :raise: KeyError if not found or already spent
         """
-        cdef uint8_t is_last
+        cdef _UtxoSpendingInfo spending_info
         cdef txid_key_t key = self._get_tx_key_from_txid(spent_txid)
+        cdef utxo_map_iter map_iter, end_iter
         
-        # NOTE: self._data.find(key) returns a ref to a _UtxEntry, which is good.
-        # However, creating a reference variable doesn't work... (https://github.com/cython/cython/issues/1108)
-        # To bypass, we use a pointer (txdata_p), and then dereference() it.
-        cdef _UtxEntry *txdata_p
-        cdef value_pair spent_info
-
-        cdef utxo_map_iter map_iter = self._data.find(key)
-        cdef utxo_map_iter end_iter = self._data.end()
-        if map_iter == end_iter:
-            raise ValueError('Tx not found in UtxoSet: %s' % bytes_to_hash_hex(spent_txid))
-
-        txdata_p = &(dereference(map_iter).second)
-        spent_info = self._pop_output(dereference(txdata_p), spent_output_idx)
-        if spent_info.second:  # second=is_last
-            # last output has now been spent. discard entry
-            _UtxEntry_dealloc(dereference(txdata_p))
-            self._data.erase(key)
-        return self._to_txoutput(spent_info.first)  # first=value
+        with nogil:
+            map_iter = self._data.find(key)
+            end_iter = self._data.end()
+            if map_iter == end_iter:
+                with gil:
+                    raise KeyError('Tx not found in UtxoSet: %s' % bytes_to_hash_hex(spent_txid))
+            self._pop_utxo(map_iter, spending_info, spent_output_idx)  # modifies spending_info inplace
+            
+        return self._to_txoutput(spending_info)
 
     @boundscheck(False)
     @wraparound(False)
@@ -197,22 +204,29 @@ cdef class UtxoSet:
     @boundscheck(False)
     @wraparound(False)
     @nonecheck(False)
-    cdef value_pair _pop_output(self, _UtxEntry &txdata, osize_t idx):
-        cdef btc_value o
-        cdef value_pair spent_info
-        with nogil:
-            o = _UtxEntry_spend(txdata, idx)
-            # first=value, second=is_last
-            spent_info.first = o
-            spent_info.second = (txdata.num_unspent == 0)
-            return spent_info
+    cdef void _pop_utxo(self, utxo_map_iter map_iter, _UtxoSpendingInfo &spending_info, osize_t idx) nogil:
+        # NOTE: self._data.find(key) returns an iterator which references a _UtxEntry.
+        # However, creating a reference variable doesn't work... (https://github.com/cython/cython/issues/1108)
+        # To bypass, we use a pointer (txdata_p), and then dereference() it.
+        #  [1]  dereference(map_iter) --> a reference to [T,U]
+        #  [2]  [1].second --> a reference to U (the value)
+        #  [3]  &([2]) --> a pointer to the value
+        #  [4]  dereference([3]) --> a reference to the value
+        cdef _UtxEntry *txdata_p = &(dereference(map_iter).second)
+        _UtxEntry_spend(dereference(txdata_p), spending_info, idx)
+        if spending_info.is_last:
+            # last output has now been spent. discard entry
+            _UtxEntry_dealloc(dereference(txdata_p))
+            self._data.erase(map_iter)
 
     @boundscheck(False)
     @wraparound(False)
     @nonecheck(False)
-    cdef TxOutput _to_txoutput(self, btc_value value):
-        # arg is just the value
-        return TxOutput(value, None)  # TBD: support setting script
+    cdef _to_txoutput(self, _UtxoSpendingInfo &utxo_sinfo):
+        return Bunch(
+            spent_output = TxOutput(utxo_sinfo.value, None), # TBD: support setting script
+            block_height = utxo_sinfo.block_height,
+        )
     
     @boundscheck(False)
     @wraparound(False)

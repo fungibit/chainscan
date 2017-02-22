@@ -76,14 +76,17 @@ From the original documentation (with minor changes):
 import datetime
 from argparse import ArgumentParser
 
-from chainscan import iter_blocks, BlockFilter
+from chainscan.scan import BlockFilter
 from chainscan.track import TxSpendingTracker
+from chainscan.blockchain import BlockChain, BlockChainIterator
 from chainscan.utils import tailable
 from chainscan.misc import bytes2uint32, hash_hex_to_bytes, s2f
 from chainscan.defs import OP_RETURN
 
 
 ###############################################################################
+
+SECONDS_PER_DAY = 60 * 60 * 24
 
 BLOCK_EVAL = {
     'l': lambda b: str(b.rawsize),
@@ -107,13 +110,10 @@ TX_EVAL = {
     't': lambda tx, idx: str(tx.locktime),
     'l': lambda tx, idx: str(tx.rawsize),
     'N': lambda tx, idx: str(idx),
-
+    'X': lambda tx, idx: tohex(bytes(tx.blob)),
     # The following require track_spending=True:
     'F': lambda tx, idx: str(s2f(tx.get_fee_paid())),
-    
-    # The following are not supported by us:
-    #'D': lambda tx, idx: tx.bitcoin days destroyed (by block times),  # TBD?
-    #'X': lambda tx, idx: tx.as a hex string (including inputs and outputs),
+    'D': lambda tx, idx: str(get_days_destroyed(tx)),  # also requires block_context
 }
 
 INPUT_EVAL = {
@@ -122,12 +122,10 @@ INPUT_EVAL = {
     'l': lambda i, idx: str(len(i.script)),
     's': lambda i, idx: tohex(i.script),
     'N': lambda i, idx: str(idx),
-    
     # The following require track_spending=True:
     'a': lambda i, idx: str(i.value),
-
+    'B': lambda i, idx: str(max(0, i.spending_info.block_height)),  # also requires block_context
     # The following are not supported by us:
-    #'B': lambda i, idx: i.UTXO block number (0 for coinbase),
     #'h': lambda i, idx: tohex(i.hash),
     #'X': lambda i, idx: i as a hex string,
     #'p': lambda i, idx: i.output_type
@@ -139,15 +137,18 @@ OUTPUT_EVAL = {
     's': lambda o, idx: tohex(o.script),
     'N': lambda o, idx: str(idx),
     'U': lambda o, idx: str(int(is_unspendable(o))),
-    
     # The following are not supported by us:
     #'X': lambda o, idx: tohex(o.raw),
 }
 
 TRACK_SPENDING_ON_FORMATS = [ '%tF', '%tD', '%iB', '%ia', '%ip' ]
+BLOCK_CONTEXT_ON_FORMATS = [ '%tD', '%iB' ]
+TX_BLOB_ON_FORMATS = [ '%tX' ]
 
+BLOCKCHAIN = BlockChain()
 
 ###############################################################################
+# Formatting functions
 
 def format_block_value(fmt, block):
     return BLOCK_EVAL[fmt](block)
@@ -187,11 +188,28 @@ def format_line(fmt, block, tx, tx_idx, input, input_idx, output, output_idx):
 def tohex(x):
     return x.hex()
 
+def parse_time(x):
+    return datetime.datetime.strptime(x, '%Y-%m-%d')
+
+###############################################################################
+# Function for deriving some values/properties of block/tx/input/output
+
 def is_unspendable(txout):
     return txout.script and txout.script[0] == OP_RETURN
 
-def parse_time(x):
-    return datetime.datetime.strptime(x, '%Y-%m-%d')
+def get_days_destroyed(tx):
+    if tx.is_coinbase:
+        return 0
+    return sum( get_txinput_destroyed(tx, txinput) for txinput in tx.inputs ) // SECONDS_PER_DAY
+    
+def get_txinput_destroyed(tx, txinput):
+    spent_block = BLOCKCHAIN.get_by_height(txinput.spending_info.block_height)
+    t = int(tx.block.timestamp.timestamp() - spent_block.timestamp.timestamp())
+    t = max(t, 0)
+    return txinput.value * t
+    
+###############################################################################
+# Misc
 
 def broken_pipe_resistant(func):
     def f(*a,**kw):
@@ -200,6 +218,13 @@ def broken_pipe_resistant(func):
         except BrokenPipeError:
             pass  # stdin or stdout disconnected
     return f
+
+def fmt_in(all_formats, fmt_set):
+    return any(
+        subfmt in fmt
+        for subfmt in fmt_set
+        for fmt in all_formats if fmt is not None
+    )
 
 ###############################################################################
 # MAIN
@@ -229,19 +254,17 @@ def main():
     
     if not should_iter_blocks:
         return
-        
-    track_spending = any(
-        subfmt in fmt
-        for subfmt in TRACK_SPENDING_ON_FORMATS
-        for fmt in all_formats if fmt is not None
-    )
+
+    include_block_context = fmt_in(all_formats, BLOCK_CONTEXT_ON_FORMATS)
+    include_tx_blob = fmt_in(all_formats, TX_BLOB_ON_FORMATS)
+    track_spending = fmt_in(all_formats, TRACK_SPENDING_ON_FORMATS)
     
     if track_spending:
         track = TxSpendingTracker()
     else:
         track = lambda txs: txs  # noop
     
-    block_iter = iter_blocks(block_filter = block_filter)
+    block_iter = BlockChainIterator(blockchain = BLOCKCHAIN, block_filter = block_filter)
     if options.tailable:
         block_iter = tailable(block_iter)
     
@@ -250,7 +273,11 @@ def main():
         if blk_format is not None:
             print(format_line(blk_format, block, None, None, None, None, None, None))
         
-        txs = block.txs if should_iter_txs else []
+        if should_iter_txs:
+            txs = block.txs.iter_txs(include_block_context = include_block_context, include_tx_blob = include_tx_blob)
+        else:
+            txs = []
+
         for tx_idx, tx in enumerate(track(txs)):
             
             if tx_format is not None:

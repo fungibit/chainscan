@@ -20,7 +20,7 @@ cdef class TxInput:
         readonly uint32_t spent_output_idx
         readonly bytesview script
         readonly uint32_t sequence
-        public TxOutput spent_output
+        public object spending_info
 
 
 cdef class CoinbaseTxInput:

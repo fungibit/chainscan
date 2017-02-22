@@ -240,8 +240,8 @@ This example is faster, uses less memory, but requires more code.
 
 ::
 
-    from chainscan import iter_blocks, BlockFilter
-    for block in iter_blocks(block_filter = BlockFilter(stop_block_height=10000)):
+    from chainscan import iter_blocks
+    for block in iter_blocks():
         block_txids = set()
         for tx in block.txs:
             for txinput in tx.inputs:
@@ -266,6 +266,7 @@ Output::
     block #2817: tx 5b62efcc5b069ab78504483869b71a9cddff63eb123bafeadd4da13c1c2902c2 spends tx 65f75ac62da749585c152f0ffed3c3482687699ccba81582561590c4e16306c9
     block #3309: tx ff21c5c13081bf836295237b908fcf0c0c28acbd2149f64cc37efb0025cbea9b spends tx d4aef5bf687ad1e45389c353b55a60073247f43a01532b17c90f20afe9963f05
     block #5219: tx 0f0fbcc18fd0d090ad3402574df8404cec1176bc000f9aa0dc19f8d832ff94db spends tx 0af02f1ec03ed31d187c4184fe56b889d92b1def2310681f43ec1a0d84365273
+    ...
 
 
 
@@ -361,8 +362,39 @@ doing the same thing without tracked-spending.
 
 This example is slower, uses more memory, but is simpler to code.
 
+:note: setting `include_block_context=True`, guarantees that:
+
+ 1. Each `tx` is a `TxInBlock` instance, which has a `tx.block` attribute.
+ 2. Each `txinput` has its `txinput.spending_info.block_height` set.
+
 ::
-    *(Not supported yet -- need to include tx's block-context when tracking spending.)*
+
+    from chainscan import iter_txs
+    for tx in iter_txs(track_spending = True, tx_kwargs = dict(include_block_context = True)):
+        height = tx.block.height
+        for txinput in tx.inputs:
+            if height == txinput.spending_info.block_height:
+                print('block #%d: tx %s spends tx %s' % (height, tx.txid_hex, txinput.spent_txid_hex))
+                break
+
+Output::
+
+    block #546: tx 6b0f8a73a56c04b519f1883e8aafda643ba61a30bd1439969df21bea5f4e27e2 spends tx 28204cad1d7fc1d199e8ef4fa22f182de6258a3eaafe1bbe56ebdcacd3069a5f
+    block #546: tx 3c1d7e82342158e4109df2e0b6348b6e84e403d8b4046d7007663ace63cddb23 spends tx 6b0f8a73a56c04b519f1883e8aafda643ba61a30bd1439969df21bea5f4e27e2
+    block #2812: tx 74c1a6dd6e88f73035143f8fc7420b5c395d28300a70bb35b943f7f2eddc656d spends tx 00e45be5b605fdb2106afa4cef5992ee6d4e3724de5dc8b13e729a3fc3ad4b94
+    block #2812: tx 131f68261e28a80c3300b048c4c51f3ca4745653ba7ad6b20cc9188322818f25 spends tx 74c1a6dd6e88f73035143f8fc7420b5c395d28300a70bb35b943f7f2eddc656d
+    block #2812: tx a64be218809b61ac67ddc7f6c7f9fbebfe420cf75fe0318ebc727f060df48b37 spends tx 131f68261e28a80c3300b048c4c51f3ca4745653ba7ad6b20cc9188322818f25
+    block #2812: tx 8f5db6d157f79f2649719d5c3ff12eb5502edf098dbfb69d6ce58363e6ff293f spends tx a64be218809b61ac67ddc7f6c7f9fbebfe420cf75fe0318ebc727f060df48b37
+    block #2813: tx 2bbeef72df21dade6fefe225c729feb0747e9759952c0e4b17f2c596e2296ff1 spends tx 2a6ede103277e9aa503d4a61058fd497fa06a362802086c64361ca10b4e3a803
+    block #2813: tx 0ba27c495fd6d3a678c0e8cecee6e08ad81c6e34bf11ec87d6dceb8ab6b0fe2f spends tx 2bbeef72df21dade6fefe225c729feb0747e9759952c0e4b17f2c596e2296ff1
+    block #2813: tx 8debdb1723672a7bc8be053b03fa52360ba730d1c4d71270da806203a1f36c38 spends tx 0ba27c495fd6d3a678c0e8cecee6e08ad81c6e34bf11ec87d6dceb8ab6b0fe2f
+    block #2813: tx a87e31b0e252fecc4a487e054fbcbd2545ea8a110747ef875a59b2e3780101db spends tx 8debdb1723672a7bc8be053b03fa52360ba730d1c4d71270da806203a1f36c38
+    block #2817: tx 65f75ac62da749585c152f0ffed3c3482687699ccba81582561590c4e16306c9 spends tx f8bf1e886d6ba6e4927acf861cf5ab3e62af2d50a6b011427f0369fa3e058eb2
+    block #2817: tx 5b62efcc5b069ab78504483869b71a9cddff63eb123bafeadd4da13c1c2902c2 spends tx 65f75ac62da749585c152f0ffed3c3482687699ccba81582561590c4e16306c9
+    block #3309: tx ff21c5c13081bf836295237b908fcf0c0c28acbd2149f64cc37efb0025cbea9b spends tx d4aef5bf687ad1e45389c353b55a60073247f43a01532b17c90f20afe9963f05
+    block #5219: tx 0f0fbcc18fd0d090ad3402574df8404cec1176bc000f9aa0dc19f8d832ff94db spends tx 0af02f1ec03ed31d187c4184fe56b889d92b1def2310681f43ec1a0d84365273
+    ...
+
 
 
 The BlockChain Data Structure

@@ -49,7 +49,7 @@ class TrackedSpendingTxIterator(TxIterator):
     """
     A TxIterator which resolves references from a TxInput to the TxOutput it spends.
     
-    For each tx returned, each tx-input has its `spent_output` attribute set (except for
+    For each tx returned, each tx-input has its `spending_info` attribute set (except for
     coinbase inputs).
 
     Element type is `Tx`.
@@ -82,7 +82,7 @@ class TrackedSpendingTxIterator(TxIterator):
 
 def _track_tx_spending(tx, utxoset):
     """
-    Updates both tx (specifically the spent_output attribute of the
+    Updates both tx (specifically the spending_info attribute of the
     tx.inputs) and utxoset (removes utxos being spent by tx, and adds tx.outputs
     as utxos).
     """
@@ -91,9 +91,8 @@ def _track_tx_spending(tx, utxoset):
     for txin in tx.inputs:
         if txin.is_coinbase:
             continue
-        spent_output = utxoset.spend(txin._spent_txid, txin.spent_output_idx)
-        #assert spent_output is not None, (tx, txin)
-        txin.spent_output = spent_output
+        spending_info = utxoset.spend(txin._spent_txid, txin.spent_output_idx)
+        txin.spending_info = spending_info
     # add outputs of new tx to utxoset
     utxoset.add_from_tx(tx)
 
