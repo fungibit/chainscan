@@ -324,18 +324,19 @@ cdef class UtxoSet:
         cdef _UtxEntry txdata
         cdef utxo_map_iter map_iter = self._data.begin()
         cdef utxo_map_iter end_iter = self._data.end()
-        state = []
+        data = []
         while map_iter != end_iter:
             key = dereference(map_iter).first
             txdata = dereference(map_iter).second
             value = _UtxEntry_getstate(txdata)
-            state.append((key, value))
+            data.append((key, value))
             preincrement(map_iter)
-        return state
+        return ( data, self.include_scripts )
     
     def __setstate__(self, state):
         cdef _UtxEntry txdata
-        for key, value in state:
+        data, self.include_scripts = state
+        for key, value in data:
             txdata = _UtxEntry_fromstate(value)
             self._data[key] = txdata
 
