@@ -460,18 +460,18 @@ This section gives examples of how this can be done.
 Using pybitcointools to verify all tx scripts
 ----------------------------------------------------
  
-*(Not supported yet -- need to include output script when tracking spending.)*
+TBD.  This example is incomplete.
 
 ::
 
     from chainscan import iter_txs
     from bitcoin.transaction import verify_tx_input
-    for tx in iter_txs(track_spending = True, include_tx_blob = True):
-        for txin in tx.inputs[0]:
-            iscript = txin.script
-            o = txin.spent_output
-            oscript = o.script # to be supported...
-            verify_tx_input(...)  # TBD
+    for tx in iter_txs(track_scripts = True, include_tx_blob = True):
+        for input_idx, txinput in enumerate(tx.inputs):
+            iscript = txinput.script
+            oscript = txinput.output_script
+            # TBD: ... verify_tx_input(tx.blob, input_idx, oscript, iscript_sig, pubkey_of_input)
+
     
 
 
