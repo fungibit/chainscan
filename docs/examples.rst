@@ -210,7 +210,7 @@ Histogram of number-of-outputs per tx, in 2016
     from datetime import datetime
     filter = BlockFilter(start_block_time = datetime(2016,1,1), stop_block_time = datetime(2017,1,1))
     data = []
-    for tx in iter_txs(block_kwargs = dict(block_filter = filter)):
+    for tx in iter_txs(block_filter = filter):
         data.append(len(tx.outputs))
     
     import numpy as np
@@ -370,7 +370,7 @@ This example is slower, uses more memory, but is simpler to code.
 ::
 
     from chainscan import iter_txs
-    for tx in iter_txs(track_spending = True, tx_kwargs = dict(include_block_context = True)):
+    for tx in iter_txs(track_spending = True, include_block_context = True):
         height = tx.block.height
         for txinput in tx.inputs:
             if height == txinput.spending_info.block_height:
@@ -466,7 +466,7 @@ Using pybitcointools to verify all tx scripts
 
     from chainscan import iter_txs
     from bitcoin.transaction import verify_tx_input
-    for tx in iter_txs(track_spending = True, tx_kwargs=dict(include_tx_blob = True)):
+    for tx in iter_txs(track_spending = True, include_tx_blob = True):
         for txin in tx.inputs[0]:
             iscript = txin.script
             o = txin.spent_output

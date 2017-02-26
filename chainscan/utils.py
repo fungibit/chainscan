@@ -49,8 +49,9 @@ def iter_txs(
         block_iter = None,
         blockchain = None,
         block_kwargs = {},
-        tx_kwargs = {},
+        block_filter = None,
         show_progressbar = False,
+        **tx_kwargs
         ):
     """
     Iterates over the transactions of the blockchain.
@@ -67,13 +68,10 @@ def iter_txs(
     """
     
     block_kwargs = dict(block_kwargs)
-    tx_kwargs = dict(tx_kwargs)
+    block_kwargs.setdefault('block_filter', block_filter)
+    block_kwargs.setdefault('show_progressbar', show_progressbar)
     
-    block_kwargs.update(
-        show_progressbar = show_progressbar,
-    )
-    
-    # blockchain building
+    # block_iter and blockchain building
     if blockchain is not None:
         # We need to build the blockchain. We wrap the original block_iter with a
         # BlockChainIterator, which builds the blockchain as we go. `blockchain` is the initial
@@ -95,10 +93,7 @@ def iter_txs(
         tx_iter_cls = TxIterator
 
     # create the tx-iterator
-    tx_kwargs.update(
-        block_iter = block_iter,
-    )
-    return tx_iter_cls(**tx_kwargs)
+    return tx_iter_cls(block_iter = block_iter, **tx_kwargs)
     
 
 ################################################################################
