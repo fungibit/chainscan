@@ -3,9 +3,10 @@ __pycache__
 *.c
 *.cpp
 *.so
-docs/_build
-dist
+*.html
+_build
 build
-chainscan.egg-info/
-_bak/
-_data/
+dist
+chainscan.egg-info
+_bak
+_data

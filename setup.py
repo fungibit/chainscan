@@ -11,6 +11,7 @@ import numpy
 EXTENSION_KWARGS = dict(
     include_dirs = [ numpy.get_include(), '.' ],
     libraries = [ 'crypto' ],
+    extra_compile_args = ['-O3'],
 )
 
 CYTHONIZE_KWARGS = dict(
