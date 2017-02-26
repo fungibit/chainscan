@@ -68,7 +68,7 @@ class TrackedSpendingTxIterator(TxIterator):
         """
         super().__init__(*args, **kwargs)
         if tracker is None:
-            tracker = TxSpendingTracker()
+            tracker = TxSpendingTracker(utxoset = utxoset)
         self.tracker = tracker
         
     def __next__(self):

@@ -81,6 +81,10 @@ cdef class TxInput:
         def __get__(self):
             return self.spending_info.spent_output.value
 
+    property output_script:
+        def __get__(self):
+            return self.spending_info.spent_output.script
+
     # pickle support
     # Note we convert bytesview to bytearray, making copies. This means the restored objects
     # can use more memory than the original objects.

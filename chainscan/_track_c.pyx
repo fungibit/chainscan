@@ -10,12 +10,12 @@ include "consts.pxi"
 from libc.stdlib cimport malloc, free
 from libcpp.pair cimport pair
 from libcpp.unordered_map cimport unordered_map
-
 from cython cimport boundscheck, wraparound, nonecheck
 from cython.operator cimport dereference, preincrement
 
 from chainscan._common_c cimport uint8_t, uint32_t, uint64_t, bytesview, btc_value
-from chainscan._common_c cimport bytes2uint64, bytes_to_hash_hex
+from chainscan._common_c cimport bytes2uint64, bytes_to_hash_hex, copy_bytes_to_carray
+from chainscan._block_c cimport Block
 from chainscan._tx_c cimport TxOutput
 
 from chainscan.misc import Bunch
@@ -31,20 +31,75 @@ cdef:
 assert TXID_PREFIX_SIZE <= 8, TXID_PREFIX_SIZE
 ctypedef uint64_t txid_key_t
 
+DEF OUTPUT_SPENT_MARKER = 0xffffffff  # max uint32
+
+
+################################################################################
+# UTX OUTPUT
+
+cdef struct _UtxOutput:
+    # The per-output data stored in a _UtxEntry
+    btc_value value
+    uint32_t script_len
+    uint8_t *script
+
+
+@boundscheck(False)
+@wraparound(False)
+@nonecheck(False)
+cdef void _UtxOutput_init(_UtxOutput &self, txoutput, uint8_t include_script):
+    cdef uint32_t n
+    cdef bytes script = txoutput.script
+
+    self.value = txoutput.value
+    if include_script and script is not None:
+        n = len(script)
+        self.script_len = n
+        self.script = copy_bytes_to_carray(script, n)
+        if not self.script:
+            raise MemoryError()
+    else:
+        self.script_len = 0
+        self.script = NULL
+
+@boundscheck(False)
+@wraparound(False)
+@nonecheck(False)
+cdef void _UtxOutput_dealloc(_UtxOutput &self) nogil:
+    self.value = OUTPUT_SPENT_MARKER
+    if self.script != NULL:
+        free(self.script)
+        self.script = NULL
+
+cdef _UtxOutput_getstate(_UtxOutput &self):
+    if self.script != NULL:
+        script_bytes = bytes(self.script[:self.script_len])
+    else:
+        script_bytes = None
+    return ( self.value, script_bytes )
+
+cdef _UtxOutput _UtxOutput_fromstate(state):
+    cdef _UtxOutput self
+    value, script_bytes = state  # note: script_bytes may be None
+    _UtxOutput_init(self, TxOutput(value, script_bytes), True)
+    return self
+
 
 ################################################################################
 # UTX ENTRY
-
+    
 cdef struct _UtxEntry:
-    # An entry in the UtxoSet data structure.
-    btc_value *output_value_arr
+    # An entry in the UtxoSet data structure (including all outputs
+    # of the unspent tx).
+    _UtxOutput *outputs
     osize_t num_outputs
     osize_t num_unspent
     int block_height
 
 cdef struct _UtxoSpendingInfo:
-    # txoutput-level data included in a _UtxEntry
-    btc_value value
+    # per-output data about spending (including data from _UtxEntry and
+    # the relevant _UtxOutput)
+    _UtxOutput *output
     int block_height
     uint8_t is_last
 
@@ -52,17 +107,27 @@ cdef struct _UtxoSpendingInfo:
 @boundscheck(False)
 @wraparound(False)
 @nonecheck(False)
-cdef void _UtxEntry_init_from_output_list(_UtxEntry &self, list outputs, int block_height):
+cdef void _UtxEntry_init_from_tx(_UtxEntry &self, tx, uint8_t include_scripts):
+
+    cdef list outputs = tx.outputs
     cdef osize_t n = len(outputs)
-    cdef unsigned int i
-    cdef TxOutput output
+    cdef Block block
+    cdef int block_height
+    
+    # use block.height if tx includes block-context (i.e. tx is a TxInBlock).
+    # else, use block_height=-1
+    block = getattr(tx, 'block', None)
+    block_height = block.height if block is not None else -1
 
     _UtxEntry_init_basic(self, n, block_height)
 
-    self.output_value_arr = <btc_value*>malloc(n * sizeof(btc_value))
+    # outputs
+    self.outputs = <_UtxOutput*>malloc(n * sizeof(_UtxOutput))
+    if not self.outputs:
+        raise MemoryError()
     for i in range(n):
-        output = outputs[i]
-        self.output_value_arr[i] = output.value
+        o = outputs[i]
+        _UtxOutput_init(self.outputs[i], o, include_scripts)
 
 @boundscheck(False)
 @wraparound(False)
@@ -75,45 +140,46 @@ cdef void _UtxEntry_init_basic(_UtxEntry &self, osize_t num_outputs, int block_h
 @boundscheck(False)
 @wraparound(False)
 @nonecheck(False)
-cdef void _UtxEntry_dealloc(_UtxEntry &self) nogil:
-    if self.output_value_arr != NULL:
-        free(self.output_value_arr)
+cdef void _UtxEntry_dealloc(_UtxEntry &self, uint8_t deep) nogil:
+    if self.outputs!= NULL:
+        # Note: it is safe to call _UtxOutput_dealloc() multiple times.
+        if deep:
+            for i in range(self.num_outputs):
+                _UtxOutput_dealloc(self.outputs[i])
+        free(self.outputs)
+        self.outputs = NULL
 
 @boundscheck(False)
 @wraparound(False)
 @nonecheck(False)
 cdef void _UtxEntry_spend(_UtxEntry &self, _UtxoSpendingInfo &spending_info, osize_t idx) nogil:
-    spending_info.value = self.output_value_arr[idx]
+    # NOTE: we "remove" the output from self by decrementing self.num_unspent.
+    # we don't deallocate the _UtxOutput data. we pass ownership of it to the caller,
+    # which later calls _UtxOutput_dealloc() on it.
+    spending_info.output = &(self.outputs[idx])
     spending_info.block_height = self.block_height
     # remove this output from self:
-    if spending_info.value > 0:
-        self.output_value_arr[idx] = 0
+    if spending_info.output.script_len != <uint32_t>OUTPUT_SPENT_MARKER:
         self.num_unspent -= 1
     spending_info.is_last = (self.num_unspent == 0)
 
 cdef _UtxEntry_getstate(_UtxEntry &self):
     cdef osize_t i
-    output_values = [ self.output_value_arr[i] for i in range(self.num_outputs) ]
-    return dict(
-        output_values = output_values,
-        num_unspent = self.num_unspent,
-        block_height = self.block_height,
-    )
+    outputs = [ _UtxOutput_getstate(self.outputs[i]) for i in range(self.num_outputs) ]
+    return ( outputs, self.block_height, self.num_unspent )
 
 cdef _UtxEntry _UtxEntry_fromstate(state):
     cdef _UtxEntry self
     cdef osize_t n, i
-    cdef btc_value value
-    output_values = state['output_values']
-    n = len(state['output_values'])
-
-    _UtxEntry_init_basic(self, n, state['block_height'])
-    self.num_unspent = state['num_unspent']
-
-    self.output_value_arr = <btc_value*>malloc(n * sizeof(btc_value))
-    for i, value in enumerate(output_values):
-        self.output_value_arr[i] = value
-
+    ( outputs, self.block_height, self.num_unspent ) = state
+    n = len(outputs)
+    _UtxEntry_init_basic(self, n, self.block_height)
+    # outputs
+    self.outputs = <_UtxOutput*>malloc(n * sizeof(_UtxOutput))
+    if not self.outputs:
+        raise MemoryError()
+    for i in range(n):
+        self.outputs[i] = _UtxOutput_fromstate(outputs[i])
     return self
     
 
@@ -131,9 +197,11 @@ cdef class UtxoSet:
     """
     
     cdef utxo_map _data
+    cdef readonly uint8_t include_scripts
     
-    def __init__(self):
+    def __init__(self, include_scripts = False):
         self._data = unordered_map[txid_key_t, _UtxEntry]()
+        self.include_scripts = include_scripts
     
     def __dealloc__(self):
         cdef _UtxEntry txdata
@@ -141,7 +209,7 @@ cdef class UtxoSet:
         cdef utxo_map_iter end_iter = self._data.end()
         while map_iter != end_iter:
             txdata = dereference(map_iter).second
-            _UtxEntry_dealloc(txdata)
+            _UtxEntry_dealloc(txdata, True)
             preincrement(map_iter)
         self._data.clear()
 
@@ -154,18 +222,9 @@ cdef class UtxoSet:
         Given a Tx, add its outputs as UTXOs.
         """
         cdef txid_key_t key
-        cdef list outputs = tx.outputs
-        cdef int block_height
-        
-        # use block.height if tx includes block-context (i.e. tx is a TxInBlock).
-        # else, use block_height=-1
-        block = getattr(tx, 'block', None)
-        block_height = block.height if block is not None else -1
-
-        # create a _UtxEntry to insert:
         cdef _UtxEntry txdata
-        _UtxEntry_init_from_output_list(txdata, outputs, block_height)
-
+        # create a _UtxEntry to insert:
+        _UtxEntry_init_from_tx(txdata, tx, self.include_scripts)
         # insert to the map:
         if txdata.num_unspent > 0:
             key = self._get_tx_key(tx)
@@ -181,8 +240,9 @@ cdef class UtxoSet:
         :raise: KeyError if not found or already spent
         """
         cdef _UtxoSpendingInfo spending_info
-        cdef txid_key_t key = self._get_tx_key_from_txid(spent_txid)
+        cdef _UtxEntry *txdata_p
         cdef utxo_map_iter map_iter, end_iter
+        cdef txid_key_t key = self._get_tx_key_from_txid(spent_txid)
         
         with nogil:
             map_iter = self._data.find(key)
@@ -192,7 +252,17 @@ cdef class UtxoSet:
                     raise KeyError('Tx not found in UtxoSet: %s' % bytes_to_hash_hex(spent_txid))
             self._pop_utxo(map_iter, spending_info, spent_output_idx)  # modifies spending_info inplace
             
-        return self._to_txoutput(spending_info)
+        txoutput = self._to_txoutput(spending_info)
+        
+        # need to deallocate the output, whose ownership was passed to us
+        _UtxOutput_dealloc(dereference(spending_info.output))
+        if spending_info.is_last:
+            # last output has now been spent. discard entry
+            txdata_p = &(dereference(map_iter).second)
+            _UtxEntry_dealloc(dereference(txdata_p), False)
+            self._data.erase(map_iter)
+        
+        return txoutput
 
     @boundscheck(False)
     @wraparound(False)
@@ -214,18 +284,25 @@ cdef class UtxoSet:
         #  [4]  dereference([3]) --> a reference to the value
         cdef _UtxEntry *txdata_p = &(dereference(map_iter).second)
         _UtxEntry_spend(dereference(txdata_p), spending_info, idx)
-        if spending_info.is_last:
-            # last output has now been spent. discard entry
-            _UtxEntry_dealloc(dereference(txdata_p))
-            self._data.erase(map_iter)
 
     @boundscheck(False)
     @wraparound(False)
     @nonecheck(False)
-    cdef _to_txoutput(self, _UtxoSpendingInfo &utxo_sinfo):
+    cdef _to_txoutput(self, _UtxoSpendingInfo &spending_info):
+        cdef _UtxOutput *output = spending_info.output
+        cdef uint8_t *oscript = output.script
+        cdef bytesview scriptview
+        if oscript != NULL:
+            if output.script_len > 0:
+                scriptview = <uint8_t[ : output.script_len : 1 ]>oscript  # this doesn't work if script_len=0...
+            else:
+                scriptview = bytearray(b'')
+        else:
+            scriptview = None
+        txoutput = TxOutput(output.value, scriptview)
         return Bunch(
-            spent_output = TxOutput(utxo_sinfo.value, None), # TBD: support setting script
-            block_height = utxo_sinfo.block_height,
+            spent_output = txoutput,
+            block_height = spending_info.block_height,
         )
     
     @boundscheck(False)

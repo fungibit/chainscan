@@ -28,3 +28,7 @@ cpdef uint64_t bytes2uint64(bytesview buf, uint8_t len) nogil
 cpdef varlenint_pair deserialize_varlen_integer(bytesview buf) nogil
 cpdef bytearray doublehash(bytesview buf)
 #cpdef bytearray doublehash_slow(bytesview x)  # for debugging
+
+cdef uint8_t* copy_bytes_to_carray(bytes data, uint32_t size)
+# This functions allocates a new C-array using malloc() and returns
+# a pointer to it.  It is caller's responsibility to free() it.

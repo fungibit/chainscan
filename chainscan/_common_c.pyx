@@ -3,6 +3,9 @@ Basic functions used throughout this package, implemented using Cython for speed
 """
 
 from cython cimport boundscheck, wraparound, nonecheck
+from libc.stdlib cimport malloc, free
+from libc.string cimport memcpy
+cimport numpy as np
 
 
 cpdef str bytes_to_hash_hex(bytesview b):
@@ -56,6 +59,19 @@ cpdef varlenint_pair deserialize_varlen_integer(bytesview buf) nogil:
     res.first = bytes2uint32(buf[1 : consume_end], consume_end-1)
     res.second = consume_end
     return res
+
+# This functions allocates a new C-array using malloc() and returns
+# a pointer to it.  It is caller's responsibility to free() it.
+@boundscheck(False)
+@wraparound(False)
+@nonecheck(False)
+cdef uint8_t* copy_bytes_to_carray(bytes data, uint32_t size):
+    # this is the best way I found to do this... couldn't make it work using memoryviews...
+    cdef uint8_t *dstptr = <uint8_t*>malloc(size * sizeof(uint8_t))
+    cdef np.ndarray[uint8_t, ndim=1, mode="c"] npview = <np.ndarray[uint8_t, ndim=1, mode="c"]>data
+    memcpy(dstptr, &(npview[0]), size)
+    return dstptr
+    
 
 ################################################################################
 # SHA256

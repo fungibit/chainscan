@@ -6,7 +6,7 @@ import time
 import threading
 
 from .scan import LongestChainBlockIterator, TxIterator
-from .track import TrackedSpendingTxIterator
+from .track import TrackedSpendingTxIterator, UtxoSet
 from .blockchain import BlockChainIterator
 
 
@@ -43,6 +43,7 @@ def get_blockchain(blockchain_iter = None, **kwargs):
 
 def iter_txs(
         track_spending = False,
+        track_scripts = False,
         tracker = None,
         utxoset = None,
         block_iter = None,
@@ -56,6 +57,8 @@ def iter_txs(
     
     :param track_spending: resolve spent_output for each TxInput (will use TrackedSpendingTxIterator
         instead of the basic TxIterator)
+    :param track_scripts: when resolving spent_output, also include its script. track_scripts=True
+        implies track_spending=True. (ignored unless utxoset is None)
     :param tracker, utxoset: ignored unless track_spending=True
     :param block_iter: a LongestChainBlockIterator
     :param blockchain: a BlockChain object to populate on the fly
@@ -80,7 +83,12 @@ def iter_txs(
         block_iter = LongestChainBlockIterator(**block_kwargs)
     
     # tracked spending
+    if track_scripts:
+        # track_scripts=True implies track_spending=True
+        track_spending = True
     if track_spending:
+        if utxoset is None:
+            utxoset = UtxoSet(include_scripts = track_scripts)
         tx_iter_cls = TrackedSpendingTxIterator
         tx_kwargs.update(tracker = tracker, utxoset = utxoset)
     else:
