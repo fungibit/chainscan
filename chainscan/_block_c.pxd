@@ -19,4 +19,4 @@ cdef class Block:
         public int32_t height
         readonly bytearray _block_hash
 
-cpdef Block deserialize_block(bytesview buf, int32_t height, uint8_t prefix_included = *)
+cpdef Block deserialize_block(bytesview buf, int32_t height, bint prefix_included = *)

@@ -43,7 +43,7 @@ cdef class Tx:
 
 
 # deserialization functions
-cpdef Tx deserialize_tx(bytesview blob, uint8_t include_blob=*)
+cpdef Tx deserialize_tx(bytesview blob, bint include_blob=*)
 cpdef tuple deserialize_tx_input(bytesview buf)
 cpdef tuple deserialize_tx_output(bytesview buf)
 

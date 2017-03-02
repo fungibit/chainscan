@@ -122,7 +122,7 @@ cdef class Block:
 @boundscheck(False)
 @wraparound(False)
 @nonecheck(False)
-cpdef Block deserialize_block(bytesview buf, int32_t height, uint8_t prefix_included = True):
+cpdef Block deserialize_block(bytesview buf, int32_t height, bint prefix_included = True):
 
     cdef:
         uint32_t magic

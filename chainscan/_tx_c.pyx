@@ -256,7 +256,7 @@ cdef class Tx:
 @boundscheck(False)
 @wraparound(False)
 @nonecheck(False)
-cpdef Tx deserialize_tx(bytesview blob, uint8_t include_blob = False):
+cpdef Tx deserialize_tx(bytesview blob, bint include_blob = False):
 
     cdef:
         bytesview version_bytes
