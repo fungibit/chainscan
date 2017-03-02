@@ -135,6 +135,88 @@ Output::
 Iterating over Transactions
 ================================
 
+
+"Hidden" messages in coinbase transactions
+----------------------------------------------
+
+Miners can put arbitrary data in coinbase transaction's input script.
+In this example, we look for such strings and print them.
+
+Amen!
+
+::
+
+    def is_text(x):
+        try:
+            return x.decode('UTF-8')
+        except UnicodeDecodeError:
+            return False
+    
+    def to_printable(x):
+        import string
+        return ''.join( c if c in string.printable else ' ' if c in string.whitespace else '*' for c in x.decode('ascii', 'replace') )
+    
+    from chainscan import iter_blocks
+    min_len = 40
+    for block in iter_blocks():
+        tx = next(iter(block.txs))  # the first tx is coinbase
+        for txinput in tx.inputs:
+            x = bytes(txinput.script).strip(b'\x00')
+            if len(x) >= min_len and (is_text(x[:min_len]) or is_text(x[-min_len:])):
+                print(tx)
+                print(to_printable(x))
+                print()
+
+
+Output::
+
+    <Tx 4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b {COINBASE}>
+    *******EThe Times 03/Jan/2009 Chancellor on brink of second bailout for banks
+    
+    <Tx cbbaa0a64924fe1d6ace3352f23242aa0028d4e0ff6ae8ed615244d66079cfb1 {COINBASE}>
+    *Eligius/Benedictus Deus. Benedictum Nomen Sanctum eius.***
+    
+    <Tx ddfdf53423f7e2742ca92b217a9d788522a661a240b12a4f9d6934902be0832b {COINBASE}>
+    *Eligius/Benedictus Deus. Benedictum Nomen Sanctum eius.**U
+    
+    <Tx 035df8c907dfca0e971f32fc1ba6d01a4524374dec8bcde24cfdef85e48e57ef {COINBASE}>
+    *Eligius****6*Benedictus Iesus Christus, verus Deus et verus homo.
+    
+    <Tx 1dae457e447a6539e256f4c43a7131300bd3a39386cd44b41e130ade5b2764b2 {COINBASE}>
+    *Eligius***)*Benedictus Sanguis eius pretiosissimus.
+    
+    <Tx 8a6c1ca4430da8992ca42a47f304fb1e2e7c0da6ec13532507cf1abf45fcd128 {COINBASE}>
+    *Eligius**<5*Benedictus Iesus in sanctissimo altaris Sacramento.
+    
+    <Tx d7a73373cd8e5ba1c9c526994d0332853543356000122d7488c864fd81a2252e {COINBASE}>
+    *Eligius******Benedictus Sanctus Spiritus, Paraclitus.
+    
+    <Tx 555f1b660f7bb183b05507d9349f42678d567217791273fdcbcf34e5d919fb56 {COINBASE}>
+    *Eligius******Benedictus Sanctus Spiritus, Paraclitus.
+    
+    <Tx 1e444e0f7b127fa8b61104c0694d9bb809847909d00644e1777c782faf047a84 {COINBASE}>
+    *Eligius***1*Benedicta excelsa Mater Dei, Maria sanctissima.
+    
+    <Tx acc1cded233538c90500709e0f6274deddfcbd161c69a2a196d8e991df92f104 {COINBASE}>
+    *Eligius*1*0*Benedicta sancta eius et immaculata Conceptio.
+    
+    <Tx 0081ea02db75bd1d06d8aa6903ed950c4b00f809ba815db7199b3fe1dda27800 {COINBASE}>
+    *Eligius*A**0*Benedicta sancta eius et immaculata Conceptio.
+    
+    <Tx 8660ad3dfc04b32a473524c8afa37e5c8475b9cb14b2ba7a51781e5b57af5686 {COINBASE}>
+    *.*Benedictum nomen Mariae, Virginis et Matris.
+    
+    <Tx f950c095dcc33a7b14ea867fa3906922a1d3bbf197e4a08382eabd0bb086d651 {COINBASE}>
+    *Eligius**x.*Benedictum nomen Mariae, Virginis et Matris.
+    
+    <Tx 71a466ab83b742111011c80270311b90631fe1682f55c62d219cb42d90db4c6f {COINBASE}>
+    *Eligius**A6*Benedictus sanctus Ioseph, eius castissimus Sponsus.
+    
+    <Tx 58cb4d33e37f7b48d2df0137f28f63c244b49428b96534663b7e058fd71b4675 {COINBASE}>
+    *Eligius**5<*Benedictus Deus in Angelis suis, et in Sanctis suis. Amen.
+    ...
+
+
 Count tx versions
 -------------------------
 
@@ -455,23 +537,42 @@ ChainScan is focused on iterating over the blockchain.  In many cases you'd
 want to use tools implemented in other bitcoin libraries for doing whatever it
 is you want to do for each block/tx in the blockchain.
 
-This section gives examples of how this can be done.
+This section gives examples of how this is done.
 
-Using pybitcointools to verify all tx scripts
+Using pybitcointools to verify all scripts
 ----------------------------------------------------
- 
-TBD.  This example is incomplete.
+
+Pybitcointools implements a Script interpreter.  In this example, we iterate over all
+transactions in the blockchain (using chainscan), and "run" the scripts to verify the
+transactions (using pybitcointools).
+
+We use:
+
+ 1. `track_scripts=True`: so that input's spent-output-script (`txinput.spent_output.script`) is set for all txs.
+ 2. `include_tx_blob=True`: so that `tx.blob` is set for all txs. We need the blob in order to verify the signatures.
+
+:note: This example requires pybitcointools to be installed (`pip install pybitcointools`).
 
 ::
 
+    # chainscan imports:
     from chainscan import iter_txs
-    from bitcoin.transaction import verify_tx_input
-    for tx in iter_txs(track_scripts = True, include_tx_blob = True):
+    # pybitcointools imports:
+    from bitcoin.core import CTransaction
+    from bitcoin.core.scripteval import CScript, VerifyScript, EvalScriptError, VerifyScriptError
+    
+    for tx in iter_txs(track_scripts = True, include_tx_blob = True, show_progressbar = True):
+        if tx.is_coinbase:
+            continue
         for input_idx, txinput in enumerate(tx.inputs):
-            iscript = txinput.script
-            oscript = txinput.output_script
-            # TBD: ... verify_tx_input(tx.blob, input_idx, oscript, iscript_sig, pubkey_of_input)
-
+            iscript = CScript(bytes(txinput.script))
+            oscript = CScript(bytes(txinput.output_script))
+            tx1 = CTransaction.deserialize(tx.blob)
+            try:
+                VerifyScript(iscript, oscript, tx1, input_idx)
+            except (VerifyScriptError, EvalScriptError) as e:
+                print('Script validation failed for tx %s, input #%s' % (tx.txid_hex, input_idx))
+                print('    ERROR: %s' % ( e, ))
     
 
 

@@ -69,7 +69,8 @@ cdef uint8_t* copy_bytes_to_carray(bytes data, uint32_t size):
     # this is the best way I found to do this... couldn't make it work using memoryviews...
     cdef uint8_t *dstptr = <uint8_t*>malloc(size * sizeof(uint8_t))
     cdef np.ndarray[uint8_t, ndim=1, mode="c"] npview = <np.ndarray[uint8_t, ndim=1, mode="c"]>data
-    memcpy(dstptr, &(npview[0]), size)
+    if dstptr != NULL:
+        memcpy(dstptr, &(npview[0]), size)
     return dstptr
     
 

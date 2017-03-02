@@ -1,3 +1,13 @@
+Planned 
+-----------
+
+* See the issue tracker: https://github.com/fungibit/chainscan/issues
+
+0.2.1
+-----
+* Added support for tracking scripts
+* More improvements to the cython/cpp code
+
 0.2.0
 -----
 * Speed improvements
