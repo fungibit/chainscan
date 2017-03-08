@@ -134,15 +134,15 @@ cdef class UtxoSet:
         if self.include_scripts:
             entry2 = &(<_Set2*>self._dataptr).add_tx(key, num_outputs, block_height)
 
-            for i in range(num_outputs):
-                o = outputs[i]
+            for oidx in range(num_outputs):
+                o = outputs[oidx]
                 value = o.value
                 script = o.script
                 script_len = len(script)
                 scriptptr = copy_bytes_to_carray(script, script_len)
                 if scriptptr == NULL:
                     raise MemoryError()
-                entry2.set_output(i, value, script_len, scriptptr)
+                entry2.set_output(oidx, value, script_len, scriptptr)
 
         else:
             entry1 = &(<_Set1*>self._dataptr).add_tx(key, num_outputs, block_height)

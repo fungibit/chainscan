@@ -54,7 +54,7 @@ ChainScan is focused on the (surprisingly complicated) task of iterating over th
 
 ChainScan *does not* aim at being "everything bitcoin" or a one-stop-shop solution.
 Various other python libraries already implement many of the tools you'd need for your
-bitcoin development tasks (pybitcointools and python-libbitcoin, to name the main ones).
+bitcoin development tasks (python-bitcoinlib, python-libbitcoin, and pybitcointools, to name the main ones).
 
 ChainScan aims at being simple-yet-powerful.  This package has been carefully designed for
 simplicity, flexibility, extensibility, and customizability, so that it can be useful for a

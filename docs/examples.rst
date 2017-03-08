@@ -539,25 +539,24 @@ is you want to do for each block/tx in the blockchain.
 
 This section gives examples of how this is done.
 
-Using pybitcointools to verify all scripts
+Using python-bitcoinlib to verify all scripts
 ----------------------------------------------------
 
-Pybitcointools implements a Script interpreter.  In this example, we iterate over all
-transactions in the blockchain (using chainscan), and "run" the scripts to verify the
-transactions (using pybitcointools).
+python-bitcoinlib implements a Script interpreter.  In this example, we iterate over all
+transactions in the blockchain (using chainscan), and use the interpreter to verify all transactions.
 
 We use:
 
  1. `track_scripts=True`: so that input's spent-output-script (`txinput.spent_output.script`) is set for all txs.
  2. `include_tx_blob=True`: so that `tx.blob` is set for all txs. We need the blob in order to verify the signatures.
 
-:note: This example requires pybitcointools to be installed (`pip install pybitcointools`).
+:note: This example requires python-bitcoinlib to be installed (`pip install bitcoin`).
 
 ::
 
     # chainscan imports:
     from chainscan import iter_txs
-    # pybitcointools imports:
+    # python-bitcoinlib imports:
     from bitcoin.core import CTransaction
     from bitcoin.core.scripteval import CScript, VerifyScript, EvalScriptError, VerifyScriptError
     
