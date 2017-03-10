@@ -93,8 +93,9 @@ useful to many.
 
 The next releases may not be backward compatible.
 
-Bug reports, suggestions and contributions are appreciated.
+*Bug reports, suggestions and contributions are appreciated.*
 
+Issues are tracked on `github <https://github.com/fungibit/chainscan/issues>`_.
 
 
 More
