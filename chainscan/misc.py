@@ -52,9 +52,20 @@ class FilePos:
 
 class Bunch(dict):
     """ A dict which allows accessing its items using attribute-access. """
-    def __init__(self, *a, **kw):
-        self.__dict__ = self
-        super().__init__(*a, **kw)
 
+    def __getattr__(self, k):
+        try:
+            return self[k]
+        except KeyError:
+            raise AttributeError(k)
+    
+    def __setattr__(self, k, v):
+        self[k] = v        
+    
+    def __delattr__(self, k):
+        del self[k]        
+    
+    def __dir__(self):
+        return dir({}) + list(self.keys())
 
 ################################################################################

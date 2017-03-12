@@ -3,6 +3,10 @@ Planned
 
 * See the issue tracker: https://github.com/fungibit/chainscan/issues
 
+0.2.2
+-----
+* Fixed a memory leak in tailable mode
+
 0.2.1
 -----
 * Now installable using pip
