@@ -1,5 +1,6 @@
 
 .. image:: https://raw.githubusercontent.com/fungibit/chainscan/master/docs/logo.jpg
+    :scale: 40 %
 
 ==========
 ChainScan
