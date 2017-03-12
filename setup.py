@@ -64,6 +64,9 @@ setup(
     license='MIT',
 
     packages=find_packages(exclude=['tests*',]),
+    include_package_data = True,
+    package_data={ 'chainscan': [ 'chainscan/*pyx', 'chainscan/*pxd', 'chainscan/*pxi' ] },
+
     platforms = ["POSIX", "Windows"],
     keywords='bitcoin, blockchain, iterator, analysis',
 

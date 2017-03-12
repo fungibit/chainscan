@@ -5,6 +5,7 @@ Planned
 
 0.2.1
 -----
+* Now installable using pip
 * Added support for tracking scripts
 * More improvements to the cython/cpp code
 

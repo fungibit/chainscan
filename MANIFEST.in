@@ -1,2 +1,6 @@
 include LICENSE
 include README.rst
+include chainscan/*.pyx
+include chainscan/*.pxd
+include chainscan/*.pxi
+include chainscan/_utxo.hpp
