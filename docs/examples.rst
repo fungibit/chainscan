@@ -574,4 +574,11 @@ We use:
                 print('    ERROR: %s' % ( e, ))
     
 
+Using BitcoinScript to count script-types
+----------------------------------------------------
 
+The documentation of the `BitcoinScript <https://bitcoinscript.readthedocs.io/en/latest/>`_ library
+includes two examples of doing this using ChainScan.
+
+See the `"Counting Script Types" example <https://bitcoinscript.readthedocs.io/en/latest/#counting-script-types>`_
+and the `"Counting P2SH Script Subtypes" example <https://bitcoinscript.readthedocs.io/en/latest/#counting-p2sh-script-subtypes>`_.
