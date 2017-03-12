@@ -1,5 +1,5 @@
 
-![Logo](https://raw.githubusercontent.com/fungibit/chainscan/master/docs/logo.jpg)
+.. image:: https://raw.githubusercontent.com/fungibit/chainscan/master/docs/logo.jpg
 
 ==========
 ChainScan
