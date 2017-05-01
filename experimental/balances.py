@@ -3,7 +3,7 @@ Simple code for tracking balances, in an address-to-balance mapping.
 """
 
 from chainscan import iter_txs
-from bitcoinscript.script import output_script_from_raw
+from bitcoinscript.script import outscript_from_raw
 
 # TBD: for memory efficiency, avoid the python-dict, use unordered_map
 # with this dict, it takes ~2.5GB -- way too much
@@ -31,7 +31,7 @@ def main():
         
         # outputs: add funds to receiver addresses
         for txoutput in tx.outputs:
-            oscript = output_script_from_raw(txoutput.script)
+            oscript = outscript_from_raw(txoutput.script)
             addr = oscript.get_address()
             if addr is not None:
                 balances.add(addr.hash160, txoutput.value)
@@ -40,7 +40,7 @@ def main():
         if not tx.is_coinbase:
             for txin in tx.inputs:
                 txoutput = txin.spent_output
-                oscript = output_script_from_raw(txoutput.script)
+                oscript = outscript_from_raw(txoutput.script)
                 addr = oscript.get_address()
                 if addr is not None:
                     balances.subtract(addr.hash160, txoutput.value)
