@@ -99,7 +99,7 @@ class BlockTxs:
         """
         Same as `iter_txs`, but generates `TxInBlock` objects instead of `Tx` objects.
         """
-        return self.iter_txs(include_block_context = True)
+        return self.iter_txs(include_block_context = True, **kwargs)
 
     def __repr__(self):
         return '<%s (%d txs)>' % (type(self).__name__, len(self))
